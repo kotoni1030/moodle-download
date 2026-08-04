@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moodle Download</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Moodle Download</h1>
+        <p class="subtitle">コースページのファイルをダウンロード</p>
+      </header>
+
+      <section class="folder-section">
+        <label class="label">保存先フォルダ</label>
+        <div class="folder-row">
+          <span id="folder-name" class="folder-name">未選択</span>
+          <button id="pick-folder" type="button" class="btn btn-secondary">選択</button>
+        </div>
+      </section>
+
+      <section class="actions-top">
+        <button id="refresh" type="button" class="btn btn-secondary">再読み込み</button>
+        <div class="select-actions">
+          <button id="select-all" type="button" class="btn btn-link">すべて選択</button>
+          <button id="deselect-all" type="button" class="btn btn-link">選択解除</button>
+        </div>
+      </section>
+
+      <div id="status" class="status" hidden></div>
+
+      <div id="file-list" class="file-list">
+        <p class="loading">読み込み中...</p>
+      </div>
+
+      <footer>
+        <span id="selection-count" class="selection-count">0 件選択</span>
+        <button id="download" type="button" class="btn btn-primary" disabled>
+          ダウンロード
+        </button>
+      </footer>
+
+      <div id="progress" class="progress" hidden>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <p id="progress-text" class="progress-text"></p>
+      </div>
+    </div>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>
