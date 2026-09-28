@@ -1,4 +1,5 @@
 import type { MessageType, MoodleFile } from "../types";
+import { downloadFilesViaChrome } from "../lib/chrome-downloader";
 import {
   downloadFilesToDirectory,
   loadDirectoryHandle,
@@ -6,7 +7,10 @@ import {
   verifyDirectoryPermission,
 } from "../lib/downloader";
 
+type SaveMode = "browser" | "custom";
+
 const folderNameEl = document.getElementById("folder-name")!;
+const customFolderRowEl = document.getElementById("custom-folder-row") as HTMLDivElement;
 const pickFolderBtn = document.getElementById("pick-folder") as HTMLButtonElement;
 const refreshBtn = document.getElementById("refresh") as HTMLButtonElement;
 const selectAllBtn = document.getElementById("select-all") as HTMLButtonElement;
@@ -18,9 +22,16 @@ const downloadBtn = document.getElementById("download") as HTMLButtonElement;
 const progressEl = document.getElementById("progress") as HTMLDivElement;
 const progressFillEl = document.getElementById("progress-fill") as HTMLDivElement;
 const progressTextEl = document.getElementById("progress-text") as HTMLParagraphElement;
+const saveModeInputs = document.querySelectorAll<HTMLInputElement>('input[name="save-mode"]');
 
 let files: MoodleFile[] = [];
 let dirHandle: FileSystemDirectoryHandle | null = null;
+let saveMode: SaveMode = "browser";
+
+function getSaveMode(): SaveMode {
+  const checked = document.querySelector<HTMLInputElement>('input[name="save-mode"]:checked');
+  return checked?.value === "custom" ? "custom" : "browser";
+}
 
 function showStatus(message: string, type: "error" | "info" | "success" = "info"): void {
   statusEl.hidden = false;
@@ -44,10 +55,24 @@ function getSelectedFiles(): MoodleFile[] {
   return files.filter((f) => selectedIds.has(f.id));
 }
 
+function canDownload(): boolean {
+  const count = getSelectedFiles().length;
+  if (count === 0) return false;
+  if (saveMode === "browser") return true;
+  return dirHandle !== null;
+}
+
 function updateSelectionCount(): void {
   const count = getSelectedFiles().length;
   selectionCountEl.textContent = `${count} 件選択`;
-  downloadBtn.disabled = count === 0 || !dirHandle;
+  downloadBtn.disabled = !canDownload();
+}
+
+function updateSaveModeUi(): void {
+  saveMode = getSaveMode();
+  const isCustom = saveMode === "custom";
+  customFolderRowEl.hidden = !isCustom;
+  updateSelectionCount();
 }
 
 function renderFileList(): void {
@@ -114,7 +139,10 @@ async function scanFiles(): Promise<void> {
     } satisfies MessageType)) as MessageType;
 
     if (!response || response.type === "SCAN_ERROR") {
-      showStatus(response?.type === "SCAN_ERROR" ? response.error : "ファイルの取得に失敗しました。", "error");
+      showStatus(
+        response?.type === "SCAN_ERROR" ? response.error : "ファイルの取得に失敗しました。",
+        "error"
+      );
       fileListEl.innerHTML = '<p class="empty">—</p>';
       files = [];
       updateSelectionCount();
@@ -162,6 +190,10 @@ async function initDirectory(): Promise<void> {
   folderNameEl.textContent = "未選択";
 }
 
+saveModeInputs.forEach((input) => {
+  input.addEventListener("change", updateSaveModeUi);
+});
+
 pickFolderBtn.addEventListener("click", async () => {
   try {
     dirHandle = await pickDirectory();
@@ -170,7 +202,10 @@ pickFolderBtn.addEventListener("click", async () => {
     showStatus(`保存先: ${dirHandle.name}`, "success");
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
-    showStatus("フォルダの選択に失敗しました。", "error");
+    showStatus(
+      "フォルダの選択に失敗しました。ダウンロード/Moodle などのサブフォルダを作成して選んでください。",
+      "error"
+    );
   }
 });
 
@@ -194,33 +229,72 @@ deselectAllBtn.addEventListener("click", () => {
 
 downloadBtn.addEventListener("click", async () => {
   const selected = getSelectedFiles();
-  if (selected.length === 0 || !dirHandle) return;
-
-  const ok = await verifyDirectoryPermission(dirHandle);
-  if (!ok) {
-    showStatus("フォルダへのアクセス権限がありません。再度選択してください。", "error");
-    return;
-  }
+  if (selected.length === 0) return;
 
   downloadBtn.disabled = true;
   pickFolderBtn.disabled = true;
   refreshBtn.disabled = true;
+  saveModeInputs.forEach((input) => {
+    input.disabled = true;
+  });
   progressEl.hidden = false;
 
-  const result = await downloadFilesToDirectory(dirHandle, selected, (current, total, fileName) => {
-    const pct = Math.round((current / total) * 100);
-    progressFillEl.style.width = `${pct}%`;
-    progressTextEl.textContent = `${current} / ${total}: ${fileName}`;
-  });
+  let result: { succeeded: number; failed: number; errors: string[] };
+
+  if (saveMode === "browser") {
+    result = await downloadFilesViaChrome(selected, (current, total, fileName) => {
+      const pct = Math.round((current / total) * 100);
+      progressFillEl.style.width = `${pct}%`;
+      progressTextEl.textContent = `${current} / ${total}: ${fileName}`;
+    });
+  } else {
+    if (!dirHandle) {
+      showStatus("保存先フォルダを選択してください。", "error");
+      progressEl.hidden = true;
+      downloadBtn.disabled = false;
+      pickFolderBtn.disabled = false;
+      refreshBtn.disabled = false;
+      saveModeInputs.forEach((input) => {
+        input.disabled = false;
+      });
+      updateSelectionCount();
+      return;
+    }
+
+    const ok = await verifyDirectoryPermission(dirHandle);
+    if (!ok) {
+      showStatus("フォルダへのアクセス権限がありません。再度選択してください。", "error");
+      progressEl.hidden = true;
+      downloadBtn.disabled = false;
+      pickFolderBtn.disabled = false;
+      refreshBtn.disabled = false;
+      saveModeInputs.forEach((input) => {
+        input.disabled = false;
+      });
+      updateSelectionCount();
+      return;
+    }
+
+    result = await downloadFilesToDirectory(dirHandle, selected, (current, total, fileName) => {
+      const pct = Math.round((current / total) * 100);
+      progressFillEl.style.width = `${pct}%`;
+      progressTextEl.textContent = `${current} / ${total}: ${fileName}`;
+    });
+  }
 
   progressEl.hidden = true;
   downloadBtn.disabled = false;
   pickFolderBtn.disabled = false;
   refreshBtn.disabled = false;
+  saveModeInputs.forEach((input) => {
+    input.disabled = false;
+  });
   updateSelectionCount();
 
   if (result.failed === 0) {
-    showStatus(`${result.succeeded} 件のダウンロードが完了しました。`, "success");
+    const destination =
+      saveMode === "browser" ? "ダウンロードフォルダ" : folderNameEl.textContent;
+    showStatus(`${result.succeeded} 件を ${destination} に保存しました。`, "success");
   } else {
     showStatus(
       `${result.succeeded} 件成功、${result.failed} 件失敗。\n${result.errors.slice(0, 3).join("\n")}`,
@@ -229,5 +303,6 @@ downloadBtn.addEventListener("click", async () => {
   }
 });
 
+updateSaveModeUi();
 void initDirectory();
 void scanFiles();

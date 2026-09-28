@@ -1,4 +1,5 @@
 import type { MoodleFile } from "../types";
+import { extensionFromMoodleIcon, extensionFromUrl, hasKnownExtension } from "./filename";
 
 const FILE_URL_PATTERNS = [
   /\/pluginfile\.php\//,
@@ -45,18 +46,26 @@ function normalizeUrl(href: string): string {
   }
 }
 
-function extractFileName(link: HTMLAnchorElement, url: string): string {
+function extractIconExt(link: HTMLAnchorElement, activity: Element | null): string {
+  const img =
+    activity?.querySelector("img.activityicon, img.icon") ??
+    link.querySelector("img") ??
+    activity?.querySelector("img");
+  return extensionFromMoodleIcon(img?.getAttribute("src"));
+}
+
+function extractFileName(link: HTMLAnchorElement, url: string, iconExt: string): string {
   const instancename = link.querySelector(".instancename");
   if (instancename) {
     const text = instancename.textContent?.trim() ?? "";
     const cleaned = text.replace(/\s*(ファイル|File|Resource|リソース|フォルダ|Folder)\s*$/i, "").trim();
-    if (cleaned) return sanitizeFileName(cleaned);
+    if (cleaned) return withHintExtension(sanitizeFileName(cleaned), url, iconExt);
   }
 
   const linkText = link.textContent?.trim() ?? "";
   if (linkText && linkText.length < 200) {
     const cleaned = linkText.replace(/\s*(ファイル|File|Resource|リソース|フォルダ|Folder)\s*$/i, "").trim();
-    if (cleaned) return sanitizeFileName(cleaned);
+    if (cleaned) return withHintExtension(sanitizeFileName(cleaned), url, iconExt);
   }
 
   const urlPath = new URL(url).pathname;
@@ -64,6 +73,12 @@ function extractFileName(link: HTMLAnchorElement, url: string): string {
   if (fromUrl && fromUrl !== "view.php") return sanitizeFileName(fromUrl);
 
   return "download";
+}
+
+function withHintExtension(name: string, url: string, iconExt: string): string {
+  if (hasKnownExtension(name)) return name;
+  const ext = extensionFromUrl(url) || iconExt;
+  return ext ? `${name}${ext}` : name;
 }
 
 function sanitizeFileName(name: string): string {
@@ -116,7 +131,8 @@ export function scanCourseFiles(): MoodleFile[] {
 
     seen.add(url);
 
-    let name = extractFileName(link, url);
+    const iconExt = extractIconExt(link, activity);
+    let name = extractFileName(link, url, iconExt);
     const type = getFileType(url);
 
     if (type === "folder" && !name.toLowerCase().includes("folder") && !name.includes("フォルダ")) {
@@ -128,6 +144,7 @@ export function scanCourseFiles(): MoodleFile[] {
       name,
       url,
       type,
+      iconExt: iconExt || undefined,
     });
   }
 

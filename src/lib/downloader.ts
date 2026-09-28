@@ -1,4 +1,5 @@
 import type { MoodleFile } from "../types";
+import { ensureExtension, toDownloadUrl } from "./filename";
 
 const DB_NAME = "moodle-download";
 const DB_VERSION = 1;
@@ -60,7 +61,7 @@ async function resolveFileName(
   dir: FileSystemDirectoryHandle,
   fileName: string
 ): Promise<string> {
-  const base = fileName.includes(".") ? fileName : `${fileName}.bin`;
+  const base = fileName;
   let candidate = base;
   let counter = 1;
 
@@ -84,13 +85,21 @@ export async function downloadFileToDirectory(
   dir: FileSystemDirectoryHandle,
   file: MoodleFile
 ): Promise<void> {
-  const response = await fetch(file.url, { credentials: "include" });
+  const response = await fetch(toDownloadUrl(file.url), { credentials: "include" });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${file.name}`);
   }
 
   const blob = await response.blob();
-  const fileName = await resolveFileName(dir, file.name);
+  const bytes = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+  const resolvedName = ensureExtension(file.name, {
+    contentDisposition: response.headers.get("content-disposition"),
+    mime: response.headers.get("content-type") || blob.type,
+    url: response.url || file.url,
+    bytes,
+    iconExt: file.iconExt,
+  });
+  const fileName = await resolveFileName(dir, resolvedName);
   const fileHandle = await dir.getFileHandle(fileName, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(blob);

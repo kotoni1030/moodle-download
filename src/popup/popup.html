@@ -14,11 +14,25 @@
       </header>
 
       <section class="folder-section">
-        <label class="label">保存先フォルダ</label>
-        <div class="folder-row">
+        <label class="label">保存先</label>
+        <div class="save-mode">
+          <label class="radio-item">
+            <input type="radio" name="save-mode" value="browser" checked />
+            <span>ダウンロードフォルダ（Chromeの設定フォルダ）</span>
+          </label>
+          <label class="radio-item">
+            <input type="radio" name="save-mode" value="custom" />
+            <span>フォルダを指定</span>
+          </label>
+        </div>
+        <div id="custom-folder-row" class="folder-row" hidden>
           <span id="folder-name" class="folder-name">未選択</span>
           <button id="pick-folder" type="button" class="btn btn-secondary">選択</button>
         </div>
+        <p class="hint">
+          macOS では「ダウンロード」フォルダ直下は選べません。フォルダ指定時は
+          <strong>ダウンロード/Moodle</strong> などサブフォルダを作成して選んでください。
+        </p>
       </section>
 
       <section class="actions-top">

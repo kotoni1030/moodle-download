@@ -3,6 +3,7 @@ export interface MoodleFile {
   name: string;
   url: string;
   type: "file" | "folder" | "resource";
+  iconExt?: string;
 }
 
 export type MessageType =
