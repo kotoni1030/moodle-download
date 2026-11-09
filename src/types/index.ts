@@ -24,6 +24,7 @@ export type MessageType =
       type: "DOWNLOAD_COMPLETE";
       succeeded: number;
       failed: number;
+      errors?: string[];
     }
   | {
       type: "DOWNLOAD_ERROR";

@@ -1,5 +1,5 @@
 import type { MoodleFile } from "../types";
-import { ensureExtension, toDownloadUrl } from "./filename";
+import { ensureExtension, sanitizeBaseName, toDownloadUrl } from "./filename";
 
 const DB_NAME = "moodle-download";
 const DB_VERSION = 1;
@@ -99,7 +99,7 @@ export async function downloadFileToDirectory(
     bytes,
     iconExt: file.iconExt,
   });
-  const fileName = await resolveFileName(dir, resolvedName);
+  const fileName = await resolveFileName(dir, sanitizeBaseName(resolvedName));
   const fileHandle = await dir.getFileHandle(fileName, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(blob);

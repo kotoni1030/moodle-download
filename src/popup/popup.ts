@@ -1,5 +1,4 @@
 import type { MessageType, MoodleFile } from "../types";
-import { downloadFilesViaChrome } from "../lib/chrome-downloader";
 import {
   downloadFilesToDirectory,
   loadDirectoryHandle,
@@ -122,6 +121,56 @@ function escapeAttr(text: string): string {
   return escapeHtml(text);
 }
 
+function downloadViaBackground(
+  selected: MoodleFile[],
+  onProgress: (current: number, total: number, fileName: string) => void
+): Promise<{ succeeded: number; failed: number; errors: string[] }> {
+  return new Promise((resolve, reject) => {
+    const port = chrome.runtime.connect({ name: "moodle-download" });
+    let settled = false;
+
+    const finish = (
+      result?: { succeeded: number; failed: number; errors: string[] },
+      error?: string
+    ) => {
+      if (settled) return;
+      settled = true;
+      try {
+        port.disconnect();
+      } catch {
+        // already disconnected
+      }
+      if (error) reject(new Error(error));
+      else resolve(result ?? { succeeded: 0, failed: selected.length, errors: ["不明なエラー"] });
+    };
+
+    port.onMessage.addListener((message: MessageType) => {
+      if (message.type === "DOWNLOAD_PROGRESS") {
+        onProgress(message.current, message.total, message.fileName);
+        return;
+      }
+      if (message.type === "DOWNLOAD_COMPLETE") {
+        finish({
+          succeeded: message.succeeded,
+          failed: message.failed,
+          errors: message.errors ?? [],
+        });
+        return;
+      }
+      if (message.type === "DOWNLOAD_ERROR") {
+        finish(undefined, message.error);
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      const err = chrome.runtime.lastError?.message;
+      if (err) finish(undefined, err);
+    });
+
+    port.postMessage({ type: "DOWNLOAD_FILES", files: selected } satisfies MessageType);
+  });
+}
+
 async function getActiveTabId(): Promise<number> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error("アクティブなタブが見つかりません。");
@@ -242,11 +291,16 @@ downloadBtn.addEventListener("click", async () => {
   let result: { succeeded: number; failed: number; errors: string[] };
 
   if (saveMode === "browser") {
-    result = await downloadFilesViaChrome(selected, (current, total, fileName) => {
-      const pct = Math.round((current / total) * 100);
-      progressFillEl.style.width = `${pct}%`;
-      progressTextEl.textContent = `${current} / ${total}: ${fileName}`;
-    });
+    try {
+      result = await downloadViaBackground(selected, (current, total, fileName) => {
+        const pct = Math.round((current / total) * 100);
+        progressFillEl.style.width = `${pct}%`;
+        progressTextEl.textContent = `${current} / ${total}: ${fileName}`;
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "ダウンロードに失敗しました。";
+      result = { succeeded: 0, failed: selected.length, errors: [msg] };
+    }
   } else {
     if (!dirHandle) {
       showStatus("保存先フォルダを選択してください。", "error");

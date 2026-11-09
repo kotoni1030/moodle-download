@@ -199,7 +199,46 @@ function stripBinExtension(name: string): string {
 }
 
 export function sanitizeBaseName(name: string): string {
-  return name.replace(/[/\\?%*:|"<>]/g, "_").trim() || "download";
+  const cleaned = name
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200d\ufeff]/g, "")
+    .replace(/[/\\?%*:|"<>#]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[. ]+|[. ]+$/g, "");
+
+  if (!cleaned) return "download";
+
+  const ext = getExtension(cleaned);
+  const stem = ext ? cleaned.slice(0, cleaned.length - ext.length) : cleaned;
+  const maxStem = 150;
+  if (stem.length <= maxStem) return cleaned;
+  return `${stem.slice(0, maxStem)}${ext}`;
+}
+
+export function mergeDownloadFilename(
+  preferredName: string,
+  chromeFilename: string,
+  iconExt?: string
+): string {
+  const preferred = sanitizeBaseName(preferredName);
+  const chromeBase = sanitizeBaseName(chromeFilename.split(/[/\\]/).pop() ?? chromeFilename);
+  const chromeExt = getExtension(chromeBase);
+  const usableChromeExt =
+    chromeExt && chromeExt !== ".bin" && chromeExt !== ".php" ? chromeExt : "";
+
+  if (hasKnownExtension(preferred) && getExtension(preferred) !== ".bin") {
+    return preferred;
+  }
+
+  const ext = usableChromeExt || iconExt || "";
+  if (!ext) return preferred;
+  if (getExtension(preferred) === ".bin") {
+    return `${preferred.slice(0, -4)}${ext}`;
+  }
+  if (!getExtension(preferred)) {
+    return `${preferred}${ext}`;
+  }
+  return preferred;
 }
 
 export function toDownloadUrl(url: string): string {
@@ -207,6 +246,9 @@ export function toDownloadUrl(url: string): string {
     const parsed = new URL(url);
     if (parsed.pathname.includes("/mod/resource/view.php") && !parsed.searchParams.has("redirect")) {
       parsed.searchParams.set("redirect", "1");
+    }
+    if (parsed.pathname.includes("/pluginfile.php") && !parsed.searchParams.has("forcedownload")) {
+      parsed.searchParams.set("forcedownload", "1");
     }
     return parsed.href;
   } catch {
