@@ -1,0 +1,14 @@
+---
+description: GitHub への push は main ではなく作業ブランチで行う
+alwaysApply: true
+---
+
+# Git ブランチ運用
+
+- 既定の作業ブランチは `develop`。
+- ユーザーから commit / push を指示された場合は、`main` には push しない。
+- 作業中のブランチが `main` なら、`develop`（または明示された feature ブランチ）に切り替えてから commit し、そのブランチを push する。
+- `main` へマージまたは `main` へ push するのは、ユーザーが明示したときだけ。
+- このリポジトリの git 操作は必ず次のディレクトリで行うこと（ホーム配下の別リポジトリを触らない）:
+
+`/Users/kotani/Documents/proguramu/moodle-download/moodle-download`
